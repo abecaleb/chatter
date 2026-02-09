@@ -1,0 +1,33 @@
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --panel: #161b22;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #2f81f7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+main { max-width: 960px; margin: 0 auto; padding: 1rem; }
+.panel { background: var(--panel); border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+input, button, textarea {
+  border-radius: 10px;
+  border: 1px solid #30363d;
+  background: #0d1117;
+  color: var(--text);
+  padding: 0.7rem;
+}
+button { cursor: pointer; background: var(--accent); border: none; font-weight: 600; }
+.chat-window { height: 62vh; overflow: auto; display: grid; gap: 0.65rem; padding-right: 0.5rem; }
+.msg { padding: 0.7rem 0.8rem; border-radius: 12px; max-width: 90%; }
+.msg.user { background: #1f6feb33; justify-self: end; }
+.msg.ai { background: #23863633; justify-self: start; }
+.msg.system { background: #9e6a0333; justify-self: center; }
+.row { display: flex; gap: 0.5rem; }
+.row > * { flex: 1; }
+.small { color: var(--muted); font-size: 0.86rem; }
