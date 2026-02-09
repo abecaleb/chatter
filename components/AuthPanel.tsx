@@ -21,8 +21,8 @@ export function AuthPanel() {
 
   return (
     <div className="panel">
-      <h2>Login</h2>
-      <p className="small">Request access below, then login with a magic link.</p>
+      <h2>Step 2: Login</h2>
+      <p className="small">Already approved? Enter your email to get a magic link.</p>
       <div className="row">
         <input placeholder="friend@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         <button onClick={sendMagicLink}>Send login link</button>
