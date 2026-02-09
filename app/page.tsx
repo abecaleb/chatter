@@ -3,6 +3,9 @@ import { AuthPanel } from "@/components/AuthPanel";
 import { AccessRequest } from "@/components/AccessRequest";
 import { ChatRoom } from "@/components/ChatRoom";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+export const dynamic = "force-dynamic";
 
 const OWNER_EMAIL = process.env.OWNER_EMAIL;
 
@@ -15,24 +18,37 @@ export default async function Home() {
   if (!session?.user?.email) {
     return (
       <main>
-        <h1>Chatter</h1>
-        <p className="small">WhatsApp style private group with Bruce Wayne AI clone.</p>
-        <AccessRequest />
-        <AuthPanel />
+        <div className="landing">
+          <h1>Chatter</h1>
+          <p className="small">Private group chat with Bruce Wayne AI.</p>
+          <AccessRequest />
+          <AuthPanel />
+        </div>
       </main>
     );
   }
 
   const email = session.user.email;
-  const { data: approved } = await supabase.from("approved_users").select("email").eq("email", email).maybeSingle();
   const isOwner = email === OWNER_EMAIL;
+
+  // Use admin client to check approval (bypasses RLS)
+  const { data: approved } = await supabaseAdmin
+    .from("approved_users")
+    .select("email")
+    .eq("email", email)
+    .maybeSingle();
 
   if (!approved && !isOwner) {
     await supabase.auth.signOut();
     redirect("/");
   }
 
-  const { data: messages } = await supabase
+  // If owner isn't in approved_users yet, auto-add them
+  if (isOwner && !approved) {
+    await supabaseAdmin.from("approved_users").upsert({ email });
+  }
+
+  const { data: messages } = await supabaseAdmin
     .from("messages")
     .select("id, content, sender_name, sender_type, created_at")
     .eq("room_id", "main")
@@ -41,12 +57,7 @@ export default async function Home() {
 
   return (
     <main>
-      <div className="panel">
-        <h1>Welcome {email}</h1>
-        <p className="small">Single room only. Session stays logged in until you log out manually.</p>
-        {isOwner ? <a href="/admin">Open owner approvals</a> : null}
-      </div>
-      <ChatRoom initialMessages={messages ?? []} userEmail={email} />
+      <ChatRoom initialMessages={messages ?? []} userEmail={email} isOwner={isOwner} />
     </main>
   );
 }

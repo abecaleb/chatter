@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { ApprovalsPanel } from "./panel";
+
+export const dynamic = "force-dynamic";
 
 const OWNER_EMAIL = process.env.OWNER_EMAIL;
 
@@ -14,7 +17,8 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  const { data: requests } = await supabase
+  // Use admin client to bypass RLS on access_requests
+  const { data: requests } = await supabaseAdmin
     .from("access_requests")
     .select("id, email, message, status, created_at")
     .order("created_at", { ascending: false })
@@ -23,6 +27,7 @@ export default async function AdminPage() {
   return (
     <main>
       <h1>Owner approvals</h1>
+      <a href="/" style={{ color: "var(--accent)" }}>&larr; Back to chat</a>
       <ApprovalsPanel initialRequests={requests ?? []} />
     </main>
   );
