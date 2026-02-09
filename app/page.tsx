@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { AuthPanel } from "@/components/AuthPanel";
 import { AccessRequest } from "@/components/AccessRequest";
 import { ChatRoom } from "@/components/ChatRoom";
+import { PendingApproval } from "@/components/PendingApproval";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -38,14 +38,18 @@ export default async function Home() {
     .eq("email", email)
     .maybeSingle();
 
-  if (!approved && !isOwner) {
-    await supabase.auth.signOut();
-    redirect("/");
-  }
-
   // If owner isn't in approved_users yet, auto-add them
   if (isOwner && !approved) {
     await supabaseAdmin.from("approved_users").upsert({ email });
+  }
+
+  // Unapproved non-owner: show pending screen with client-side logout
+  if (!approved && !isOwner) {
+    return (
+      <main>
+        <PendingApproval email={email} />
+      </main>
+    );
   }
 
   const { data: messages } = await supabaseAdmin
