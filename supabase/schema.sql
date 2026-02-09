@@ -28,11 +28,17 @@ create table if not exists training_snippets (
   created_at timestamptz not null default now()
 );
 
+-- Indexes for performance
+create index if not exists idx_messages_room_created on messages (room_id, created_at);
+create index if not exists idx_access_requests_status on access_requests (status);
+
+-- Enable RLS
 alter table approved_users enable row level security;
 alter table access_requests enable row level security;
 alter table messages enable row level security;
 alter table training_snippets enable row level security;
 
+-- Messages: approved users can read and insert
 drop policy if exists "approved users can read messages" on messages;
 create policy "approved users can read messages" on messages
 for select to authenticated using (
@@ -45,4 +51,18 @@ for insert to authenticated with check (
   auth.email() in (select email from approved_users)
 );
 
+-- Approved users: let authenticated users check their own approval status
+drop policy if exists "users can check own approval" on approved_users;
+create policy "users can check own approval" on approved_users
+for select to authenticated using (
+  email = auth.email()
+);
+
+-- Access requests: anyone can insert (public request form uses service role,
+-- but this policy exists for completeness)
+drop policy if exists "public can insert access requests" on access_requests;
+create policy "public can insert access requests" on access_requests
+for insert to anon, authenticated with check (true);
+
+-- Enable realtime for messages
 alter publication supabase_realtime add table messages;

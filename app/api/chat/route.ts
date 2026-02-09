@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Not approved" }, { status: 403 });
   }
 
+  // Insert the user's message
   await supabaseAdmin.from("messages").insert({
     room_id: "main",
     content,
@@ -31,13 +32,30 @@ export async function POST(req: Request) {
     sender_type: "user"
   });
 
+  // Fetch recent conversation history for context
+  const { data: recentMessages } = await supabaseAdmin
+    .from("messages")
+    .select("content, sender_name, sender_type")
+    .eq("room_id", "main")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const chatHistory = (recentMessages ?? [])
+    .reverse()
+    .map((m) => {
+      const name = m.sender_type === "ai" ? "Bruce Wayne" : m.sender_name;
+      return `${name}: ${m.content}`;
+    })
+    .join("\n");
+
+  // Search training snippets for relevant style examples
   const { data: snippets } = await supabaseAdmin
     .from("training_snippets")
     .select("snippet")
-    .ilike("snippet", `%${content.slice(0, 24)}%`)
-    .limit(8);
+    .ilike("snippet", `%${content.slice(0, 40).replace(/[%_]/g, "")}%`)
+    .limit(6);
 
-  const fallback = await supabaseAdmin.from("training_snippets").select("snippet").limit(8);
+  const fallback = await supabaseAdmin.from("training_snippets").select("snippet").limit(6);
 
   const memory = (snippets && snippets.length > 0 ? snippets : fallback.data ?? [])
     .map((s) => s.snippet)
@@ -47,21 +65,33 @@ export async function POST(req: Request) {
   const completion = await client.chat.completions.create({
     model: MODEL,
     temperature: 0.8,
+    max_tokens: 300,
     messages: [
       {
         role: "system",
-        content:
-          "You are Bruce Wayne, chatting with close friends in a casual WhatsApp group. Keep responses natural, short-to-medium, warm, and personal."
+        content: `You are Bruce Wayne, chatting with close friends in a private WhatsApp-style group chat.
+
+Personality & style rules:
+- You're warm, witty, and casual. You use emojis naturally (especially the cat laugh emoji, rolling on floor laughing, sweat smile, shrug).
+- Keep responses short like real WhatsApp messages — usually 1-3 short sentences.
+- You're into football (Arsenal fan), movies, tech, and friendly banter.
+- You tease your friends lovingly. You ask follow-up questions.
+- Never break character. Never mention you are an AI.
+- Match the energy of the conversation — if someone is joking, joke back.
+- Use casual contractions: "dunno", "wot", "yep", "dude", "lol", "haha".
+
+Here are real chat excerpts showing your style:
+${memory}`
       },
       {
         role: "system",
-        content: `Style memory from real chats:\n${memory}`
+        content: `Recent conversation in the group:\n${chatHistory}`
       },
       { role: "user", content }
     ]
   });
 
-  const aiText = completion.choices[0]?.message?.content?.trim() || "Sorry, I blanked out for a sec.";
+  const aiText = completion.choices[0]?.message?.content?.trim() || "Sorry, blanked out for a sec";
 
   await supabaseAdmin.from("messages").insert({
     room_id: "main",
