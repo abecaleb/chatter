@@ -5,10 +5,26 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 const OWNER_EMAIL = process.env.OWNER_EMAIL;
+const MAX_MESSAGE_LENGTH = 2000;
 
 export async function POST(req: Request) {
   const { content, userEmail } = await req.json();
-  if (!content || !userEmail) return NextResponse.json({ message: "Missing fields" }, { status: 400 });
+  const normalizedContent = typeof content === "string" ? content.trim() : "";
+
+  if (!normalizedContent || typeof userEmail !== "string") {
+    return NextResponse.json({ message: "Missing fields" }, { status: 400 });
+  }
+
+  if (normalizedContent.length > MAX_MESSAGE_LENGTH) {
+    return NextResponse.json(
+      { message: `Message is too long. Max ${MAX_MESSAGE_LENGTH} characters.` },
+      { status: 400 }
+    );
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ message: "Chat model is not configured." }, { status: 500 });
+  }
 
   const supabase = createRouteSupabase();
   const {
@@ -25,12 +41,16 @@ export async function POST(req: Request) {
   }
 
   // Insert the user's message
-  await supabaseAdmin.from("messages").insert({
+  const { error: userInsertError } = await supabaseAdmin.from("messages").insert({
     room_id: "main",
-    content,
+    content: normalizedContent,
     sender_name: userEmail,
     sender_type: "user"
   });
+
+  if (userInsertError) {
+    return NextResponse.json({ message: "Failed to save message." }, { status: 500 });
+  }
 
   // Fetch recent conversation history for context
   const { data: recentMessages } = await supabaseAdmin
@@ -52,7 +72,7 @@ export async function POST(req: Request) {
   const { data: snippets } = await supabaseAdmin
     .from("training_snippets")
     .select("snippet")
-    .ilike("snippet", `%${content.slice(0, 40).replace(/[%_]/g, "")}%`)
+    .ilike("snippet", `%${normalizedContent.slice(0, 40).replace(/[%_]/g, "")}%`)
     .limit(6);
 
   const fallback = await supabaseAdmin.from("training_snippets").select("snippet").limit(6);
@@ -87,18 +107,22 @@ ${memory}`
         role: "system",
         content: `Recent conversation in the group:\n${chatHistory}`
       },
-      { role: "user", content }
+      { role: "user", content: normalizedContent }
     ]
   });
 
   const aiText = completion.choices[0]?.message?.content?.trim() || "Sorry, blanked out for a sec";
 
-  await supabaseAdmin.from("messages").insert({
+  const { error: aiInsertError } = await supabaseAdmin.from("messages").insert({
     room_id: "main",
     content: aiText,
     sender_name: "Bruce Wayne AI",
     sender_type: "ai"
   });
+
+  if (aiInsertError) {
+    return NextResponse.json({ message: "Failed to save AI response." }, { status: 500 });
+  }
 
   return NextResponse.json({ message: "ok" });
 }
